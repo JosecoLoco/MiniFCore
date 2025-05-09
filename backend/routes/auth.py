@@ -1,18 +1,17 @@
 from flask import Blueprint, request, jsonify
 from models.user import User
-from functools import wraps
+from models.mongo import mongo
+from datetime import datetime, timedelta
 import jwt
 import os
-from datetime import datetime, timedelta
+from functools import wraps
 
 auth = Blueprint('auth', __name__)
 
-def create_token(user_id):
-    payload = {
-        'user_id': user_id,
-        'exp': datetime.utcnow() + timedelta(days=1)
-    }
-    return jwt.encode(payload, os.getenv('JWT_SECRET', 'tu-clave-secreta'), algorithm='HS256')
+# Configuración del token JWT
+JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key')
+JWT_ALGORITHM = 'HS256'
+INACTIVITY_TIMEOUT = 15  # segundos
 
 def token_required(f):
     @wraps(f)
@@ -20,114 +19,114 @@ def token_required(f):
         token = request.headers.get('Authorization')
         if not token:
             return jsonify({'message': 'Token no proporcionado'}), 401
+        
         try:
-            token = token.split(' ')[1]  # Remover 'Bearer '
-            data = jwt.decode(token, os.getenv('JWT_SECRET', 'tu-clave-secreta'), algorithms=['HS256'])
-            current_user_id = data['user_id']
+            token = token.split(' ')[1]  # Eliminar 'Bearer ' del token
+            data = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            current_user = mongo.db.users.find_one({'_id': data['user_id']})
+            
+            if not current_user:
+                return jsonify({'message': 'Usuario no encontrado'}), 401
+
+            # Verificar timeout de inactividad
+            last_activity = current_user.get('last_activity', datetime.utcnow())
+            if datetime.utcnow() - last_activity > timedelta(seconds=INACTIVITY_TIMEOUT):
+                return jsonify({'message': 'Sesión expirada por inactividad'}), 401
+
+            # Actualizar timestamp de última actividad
+            mongo.db.users.update_one(
+                {'_id': current_user['_id']},
+                {'$set': {'last_activity': datetime.utcnow()}}
+            )
+
         except jwt.ExpiredSignatureError:
             return jsonify({'message': 'Token expirado'}), 401
         except jwt.InvalidTokenError:
             return jsonify({'message': 'Token inválido'}), 401
-        return f(current_user_id, *args, **kwargs)
+
+        return f(current_user, *args, **kwargs)
     return decorated
 
-@auth.route('/api/auth/register', methods=['POST'])
+@auth.route('/register', methods=['POST'])
 def register():
-    from app import mongo
-    data = request.json
-
+    data = request.get_json()
+    
     # Validar campos requeridos
-    required_fields = ['email', 'password', 'name', 'phone', 'city']
-    for field in required_fields:
-        if field not in data:
-            return jsonify({'message': f'El campo {field} es requerido'}), 400
-
-    # Validar email
-    if not User.validate_email(data['email']):
-        return jsonify({'message': 'Email inválido'}), 400
-
+    required_fields = ['name', 'email', 'password', 'phone']
+    if not all(field in data for field in required_fields):
+        return jsonify({'message': 'Faltan campos requeridos'}), 400
+    
+    # Validar email único
+    if mongo.db.users.find_one({'email': data['email']}):
+        return jsonify({'message': 'El email ya está registrado'}), 400
+    
     # Validar teléfono
     if not User.validate_phone(data['phone']):
         return jsonify({'message': 'Número de teléfono inválido'}), 400
-
-    # Validar si el email ya existe
-    if mongo.db.users.find_one({'email': data['email']}):
-        return jsonify({'message': 'El email ya está registrado'}), 400
-
-    # Validar contraseña
-    is_valid_password, password_message = User.validate_password(data['password'])
-    if not is_valid_password:
-        return jsonify({'message': password_message}), 400
-
+    
     # Crear usuario
     user = User(
+        name=data['name'],
         email=data['email'],
         password=data['password'],
-        name=data['name'],
         phone=data['phone'],
-        city=data['city']
+        city=data.get('city')
     )
-
+    
     # Guardar en la base de datos
-    mongo.db.users.insert_one(user.to_dict(include_password=True))
-
-    # Generar token
-    token = create_token(user._id)
-
+    user_dict = user.to_dict(include_password=True)
+    result = mongo.db.users.insert_one(user_dict)
+    user_dict['_id'] = str(result.inserted_id)
+    
+    # Eliminar la contraseña antes de enviar la respuesta
+    user_dict.pop('password', None)
+    
     return jsonify({
         'message': 'Usuario registrado exitosamente',
-        'token': token,
-        'user': {
-            'id': user._id,
-            'email': user.email,
-            'name': user.name,
-            'phone': user.phone,
-            'country': user.country_info['name'],
-            'country_code': user.country_info['code'],
-            'city': user.city
-        }
+        'user': user_dict
     }), 201
 
-@auth.route('/api/auth/login', methods=['POST'])
+@auth.route('/login', methods=['POST'])
 def login():
-    from app import mongo
-    data = request.json
-
-    # Validar campos requeridos
-    if not data.get('email') or not data.get('password'):
-        return jsonify({'message': 'Email y contraseña son requeridos'}), 400
-
-    # Buscar usuario
+    data = request.get_json()
+    
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'message': 'Credenciales incompletas'}), 400
+    
     user_data = mongo.db.users.find_one({'email': data['email']})
     if not user_data:
-        return jsonify({'message': 'Credenciales inválidas'}), 401
-
-    user = User.from_dict(user_data)
+        return jsonify({'message': 'Usuario no encontrado'}), 401
     
-    # Verificar contraseña
-    if not user.check_password(data['password']):
-        return jsonify({'message': 'Credenciales inválidas'}), 401
-
+    user = User.from_dict(user_data)
+    if not user.verify_password(data['password']):
+        return jsonify({'message': 'Contraseña incorrecta'}), 401
+    
+    # Actualizar timestamp de última actividad
+    user.update_last_activity()
+    mongo.db.users.update_one(
+        {'_id': user_data['_id']},
+        {'$set': {'last_activity': user.last_activity}}
+    )
+    
     # Generar token
-    token = create_token(user._id)
-
+    token = jwt.encode({
+        'user_id': str(user_data['_id']),
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    
+    user_dict = user.to_dict()
+    user_dict['_id'] = str(user_data['_id'])
+    
     return jsonify({
         'message': 'Login exitoso',
         'token': token,
-        'user': {
-            'id': user._id,
-            'email': user.email,
-            'name': user.name
-        }
-    })
+        'user': user_dict
+    }), 200
 
-@auth.route('/api/auth/me', methods=['GET'])
+@auth.route('/check-session', methods=['GET'])
 @token_required
-def get_current_user(current_user_id):
-    from app import mongo
-    user_data = mongo.db.users.find_one({'_id': current_user_id})
-    if not user_data:
-        return jsonify({'message': 'Usuario no encontrado'}), 404
-
-    user = User.from_dict(user_data)
-    return jsonify(user.to_dict()) 
+def check_session(current_user):
+    return jsonify({
+        'message': 'Sesión válida',
+        'user': current_user
+    }), 200 

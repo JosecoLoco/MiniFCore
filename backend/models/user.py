@@ -4,40 +4,42 @@ import re
 from werkzeug.security import generate_password_hash, check_password_hash
 import phonenumbers
 from phonenumbers import geocoder
+import bcrypt
 
 class User:
-    def __init__(self, email, password, name, phone, city=None, role="user", created_at=None, _id=None):
-        self._id = _id if _id else str(ObjectId())
-        self.email = email
-        self.password_hash = generate_password_hash(password)
+    def __init__(self, name, email, password, phone, city=None):
         self.name = name
+        self.email = email
+        self.password = self._encrypt_password(password)
         self.phone = phone
-        self.country_info = self._get_country_info(phone)
+        self.country = self._get_country_from_phone(phone)
         self.city = city
-        self.role = role
-        self.created_at = created_at if created_at else datetime.utcnow()
+        self.created_at = datetime.utcnow()
+        self.is_admin = False
+        self.last_activity = datetime.utcnow()
 
     @staticmethod
-    def _get_country_info(phone):
+    def _encrypt_password(password):
+        """Encripta la contraseña usando bcrypt"""
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode('utf-8'), salt)
+
+    def verify_password(self, password):
+        """Verifica si la contraseña coincide con la encriptada"""
+        return bcrypt.checkpw(password.encode('utf-8'), self.password)
+
+    def _get_country_from_phone(self, phone):
+        """Obtiene el país basado en el código del teléfono"""
         try:
-            # Parsear el número de teléfono
             parsed_number = phonenumbers.parse(phone)
-            # Obtener el país
-            country = geocoder.description_for_number(parsed_number, "es")
-            # Obtener el código del país
             country_code = phonenumbers.region_code_for_number(parsed_number)
-            return {
-                'name': country,
-                'code': country_code.lower()  # Convertir a minúsculas para las banderas
-            }
+            return country_code
         except:
-            return {
-                'name': None,
-                'code': None
-            }
+            return None
 
     @staticmethod
     def validate_phone(phone):
+        """Valida si el número de teléfono es válido"""
         try:
             parsed_number = phonenumbers.parse(phone)
             return phonenumbers.is_valid_number(parsed_number)
@@ -61,34 +63,45 @@ class User:
             return False, "La contraseña debe contener al menos un número"
         return True, "Contraseña válida"
 
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-
-    @staticmethod
-    def from_dict(data):
-        return User(
-            email=data.get('email'),
-            password=data.get('password') if 'password' in data else None,
-            name=data.get('name'),
-            phone=data.get('phone'),
-            city=data.get('city'),
-            role=data.get('role', 'user'),
-            created_at=data.get('created_at'),
-            _id=data.get('_id')
-        )
-
     def to_dict(self, include_password=False):
+        """Convierte el objeto a un diccionario para almacenar en MongoDB"""
         user_dict = {
-            '_id': self._id,
-            'email': self.email,
             'name': self.name,
+            'email': self.email,
             'phone': self.phone,
-            'country': self.country_info['name'],
-            'country_code': self.country_info['code'],
+            'country': self.country,
             'city': self.city,
-            'role': self.role,
-            'created_at': self.created_at
+            'created_at': self.created_at,
+            'is_admin': self.is_admin,
+            'last_activity': self.last_activity
         }
+        
         if include_password:
-            user_dict['password_hash'] = self.password_hash
-        return user_dict 
+            user_dict['password'] = self.password.decode('utf-8') if isinstance(self.password, bytes) else self.password
+            
+        return user_dict
+
+    @classmethod
+    def from_dict(cls, data):
+        """Crea un objeto User desde un diccionario de MongoDB"""
+        user = cls(
+            name=data['name'],
+            email=data['email'],
+            password='',  # No necesitamos la contraseña para crear el objeto
+            phone=data['phone'],
+            city=data.get('city')
+        )
+        # Convertir la contraseña a bytes si es string
+        password = data['password']
+        if isinstance(password, str):
+            password = password.encode('utf-8')
+        user.password = password
+        user.created_at = data['created_at']
+        user.is_admin = data.get('is_admin', False)
+        user.last_activity = data.get('last_activity', datetime.utcnow())
+        return user
+
+    def update_last_activity(self):
+        """Actualiza el timestamp de última actividad"""
+        self.last_activity = datetime.utcnow()
+        return self.last_activity 
