@@ -37,7 +37,7 @@ def register():
     data = request.json
 
     # Validar campos requeridos
-    required_fields = ['email', 'password', 'name']
+    required_fields = ['email', 'password', 'name', 'phone', 'city']
     for field in required_fields:
         if field not in data:
             return jsonify({'message': f'El campo {field} es requerido'}), 400
@@ -45,6 +45,10 @@ def register():
     # Validar email
     if not User.validate_email(data['email']):
         return jsonify({'message': 'Email inválido'}), 400
+
+    # Validar teléfono
+    if not User.validate_phone(data['phone']):
+        return jsonify({'message': 'Número de teléfono inválido'}), 400
 
     # Validar si el email ya existe
     if mongo.db.users.find_one({'email': data['email']}):
@@ -59,7 +63,9 @@ def register():
     user = User(
         email=data['email'],
         password=data['password'],
-        name=data['name']
+        name=data['name'],
+        phone=data['phone'],
+        city=data['city']
     )
 
     # Guardar en la base de datos
@@ -74,7 +80,11 @@ def register():
         'user': {
             'id': user._id,
             'email': user.email,
-            'name': user.name
+            'name': user.name,
+            'phone': user.phone,
+            'country': user.country_info['name'],
+            'country_code': user.country_info['code'],
+            'city': user.city
         }
     }), 201
 

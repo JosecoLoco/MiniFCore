@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './Login.css';
 
 const Login = ({ onAuthSuccess }) => {
@@ -6,15 +6,38 @@ const Login = ({ onAuthSuccess }) => {
     const [formData, setFormData] = useState({
         email: '',
         password: '',
-        name: ''
+        name: '',
+        phoneExtension: '593',
+        phoneNumber: '',
+        city: ''
     });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [countryCode, setCountryCode] = useState('ec');
+
+    useEffect(() => {
+        // Actualizar el código del país cuando cambie la extensión
+        if (formData.phoneExtension === '593') {
+            setCountryCode('ec');
+        }
+    }, [formData.phoneExtension]);
 
     const handleChange = (e) => {
+        const { name, value } = e.target;
+        
+        // Validar que solo se ingresen números en los campos de teléfono
+        if ((name === 'phoneExtension' || name === 'phoneNumber') && !/^\d*$/.test(value)) {
+            return;
+        }
+
+        // Limitar la extensión a 3 dígitos
+        if (name === 'phoneExtension' && value.length > 3) {
+            return;
+        }
+
         setFormData({
             ...formData,
-            [e.target.name]: e.target.value
+            [name]: value
         });
         setError('');
     };
@@ -28,6 +51,15 @@ const Login = ({ onAuthSuccess }) => {
             const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
             const url = `http://localhost:5000${endpoint}`;
             
+            // Combinar la extensión y el número para el backend
+            const submitData = isLogin ? {
+                email: formData.email,
+                password: formData.password
+            } : {
+                ...formData,
+                phone: `+${formData.phoneExtension}${formData.phoneNumber}`
+            };
+            
             console.log('Intentando conectar a:', url);
             
             const response = await fetch(url, {
@@ -36,10 +68,7 @@ const Login = ({ onAuthSuccess }) => {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify(isLogin ? {
-                    email: formData.email,
-                    password: formData.password
-                } : formData),
+                body: JSON.stringify(submitData),
             });
 
             console.log('Respuesta recibida:', response.status);
@@ -76,7 +105,10 @@ const Login = ({ onAuthSuccess }) => {
         setFormData({
             email: '',
             password: '',
-            name: ''
+            name: '',
+            phoneExtension: '593',
+            phoneNumber: '',
+            city: ''
         });
     };
 
@@ -99,19 +131,68 @@ const Login = ({ onAuthSuccess }) => {
                     )}
                     <form onSubmit={handleSubmit} className="login-form">
                         {!isLogin && (
-                            <div className="form-group">
-                                <div className="input-icon">
-                                    <span className="material-icons">person</span>
-                                    <input
-                                        type="text"
-                                        name="name"
-                                        placeholder="Nombre completo"
-                                        value={formData.name}
-                                        onChange={handleChange}
-                                        required={!isLogin}
-                                    />
+                            <>
+                                <div className="form-group">
+                                    <div className="input-icon">
+                                        <span className="material-icons">person</span>
+                                        <input
+                                            type="text"
+                                            name="name"
+                                            placeholder="Nombre completo"
+                                            value={formData.name}
+                                            onChange={handleChange}
+                                            required={!isLogin}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
+                                <div className="form-group phone-group">
+                                    <div className="phone-inputs">
+                                        <div className="phone-extension">
+                                            <span className="extension-prefix">+</span>
+                                            <input
+                                                type="text"
+                                                name="phoneExtension"
+                                                placeholder="593"
+                                                value={formData.phoneExtension}
+                                                onChange={handleChange}
+                                                required={!isLogin}
+                                                maxLength={3}
+                                            />
+                                        </div>
+                                        <div className="phone-number">
+                                            <input
+                                                type="tel"
+                                                name="phoneNumber"
+                                                placeholder="Número de teléfono"
+                                                value={formData.phoneNumber}
+                                                onChange={handleChange}
+                                                required={!isLogin}
+                                            />
+                                        </div>
+                                        <div className="country-flag">
+                                            <img 
+                                                src={`https://flagcdn.com/w20/${countryCode}.png`}
+                                                alt={`Bandera de ${countryCode.toUpperCase()}`}
+                                                width="20"
+                                                height="15"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <div className="input-icon">
+                                        <span className="material-icons">location_city</span>
+                                        <input
+                                            type="text"
+                                            name="city"
+                                            placeholder="Ciudad"
+                                            value={formData.city}
+                                            onChange={handleChange}
+                                            required={!isLogin}
+                                        />
+                                    </div>
+                                </div>
+                            </>
                         )}
                         <div className="form-group">
                             <div className="input-icon">

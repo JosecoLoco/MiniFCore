@@ -238,4 +238,79 @@
 
 .spinning {
     animation: spin 1s linear infinite;
+}
+
+.phone-group {
+    margin-bottom: 20px;
+}
+
+.country-flag {
+    display: flex;
+    align-items: center;
+    padding: 0 5px;
+}
+
+.country-flag img {
+    border-radius: 2px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.phone-inputs {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 5px;
+}
+
+.phone-extension {
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 0 10px;
+}
+
+.extension-prefix {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1.1rem;
+    margin-right: 5px;
+}
+
+.phone-extension input {
+    width: 50px;
+    border: none;
+    background: transparent;
+    padding: 12px 5px;
+    font-size: 1rem;
+    color: #fff;
+}
+
+.phone-extension input:focus {
+    outline: none;
+}
+
+.phone-number {
+    flex: 1;
+}
+
+.phone-number input {
+    width: 100%;
+    padding: 12px 15px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    font-size: 1rem;
+    color: #fff;
+    transition: all 0.3s ease;
+}
+
+.phone-number input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.phone-number input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
 } 
