@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './AdminDashboard.css';
-import FlujoPedidos from './FlujoPedidos';
 
 function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('productos');
@@ -354,12 +353,6 @@ function AdminDashboard() {
         >
           Filamentos
         </button>
-        <button 
-          className={`tab-button ${activeTab === 'flujo' ? 'active' : ''}`}
-          onClick={() => setActiveTab('flujo')}
-        >
-          Flujo de Pedidos
-        </button>
       </div>
 
       {activeTab === 'productos' ? (
@@ -509,7 +502,7 @@ function AdminDashboard() {
             </table>
           </div>
         </div>
-      ) : activeTab === 'filamentos' ? (
+      ) : (
         <div className="filamentos-section">
           <button className="add-button" onClick={() => setShowFilamentoModal(true)}>
             Agregar Nuevo Filamento
@@ -557,8 +550,6 @@ function AdminDashboard() {
             </table>
           </div>
         </div>
-      ) : (
-        <FlujoPedidos />
       )}
 
       {showModal && (

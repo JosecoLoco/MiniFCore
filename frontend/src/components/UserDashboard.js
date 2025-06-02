@@ -14,10 +14,9 @@ function UserDashboard() {
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
   const [formData, setFormData] = useState({
     cantidad: 1,
-    direccion_entrega: '',
-    telefono: '',
     especificaciones: '',
-    fecha_entrega: ''
+    direccion_entrega: '',
+    telefono: ''
   });
 
   useEffect(() => {
@@ -84,30 +83,34 @@ function UserDashboard() {
       };
 
       const pedidoData = {
-        ...formData,
         producto_id: productoSeleccionado._id,
-        cantidad: parseInt(formData.cantidad)
+        cantidad: formData.cantidad,
+        especificaciones: formData.especificaciones,
+        direccion_entrega: formData.direccion_entrega,
+        telefono: formData.telefono,
+        estado: 'pendiente',
+        fecha: new Date().toISOString()
       };
 
       await axios.post('http://localhost:5000/pedidos', pedidoData, { headers });
       
-      // Actualizar la lista de pedidos si estamos en la pestaña de pedidos
+      setShowModal(false);
+      setProductoSeleccionado(null);
+      setFormData({
+        cantidad: 1,
+        especificaciones: '',
+        direccion_entrega: '',
+        telefono: ''
+      });
+      
+      // Actualizar la lista de pedidos
       if (activeTab === 'pedidos') {
         fetchData();
       }
       
       alert('Pedido realizado con éxito');
-      setShowModal(false);
-      setProductoSeleccionado(null);
-      setFormData({
-        cantidad: 1,
-        direccion_entrega: '',
-        telefono: '',
-        especificaciones: '',
-        fecha_entrega: ''
-      });
     } catch (err) {
-      alert('Error al realizar el pedido: ' + (err.response?.data?.error || err.message));
+      setError('Error al realizar el pedido');
     }
   };
 
@@ -245,7 +248,16 @@ function UserDashboard() {
                 />
               </div>
               <div className="form-group">
-                <label>Dirección de Entrega:</label>
+                <label>Especificaciones adicionales:</label>
+                <textarea
+                  name="especificaciones"
+                  value={formData.especificaciones}
+                  onChange={handleInputChange}
+                  placeholder="Detalles adicionales del pedido..."
+                />
+              </div>
+              <div className="form-group">
+                <label>Dirección de entrega:</label>
                 <input
                   type="text"
                   name="direccion_entrega"
@@ -255,7 +267,7 @@ function UserDashboard() {
                 />
               </div>
               <div className="form-group">
-                <label>Teléfono:</label>
+                <label>Teléfono de contacto:</label>
                 <input
                   type="tel"
                   name="telefono"
@@ -264,27 +276,8 @@ function UserDashboard() {
                   required
                 />
               </div>
-              <div className="form-group">
-                <label>Fecha de Entrega:</label>
-                <input
-                  type="date"
-                  name="fecha_entrega"
-                  value={formData.fecha_entrega}
-                  onChange={handleInputChange}
-                  min={new Date().toISOString().split('T')[0]}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Especificaciones Adicionales:</label>
-                <textarea
-                  name="especificaciones"
-                  value={formData.especificaciones}
-                  onChange={handleInputChange}
-                />
-              </div>
               <div className="modal-buttons">
-                <button type="submit" className="save-button">
+                <button type="submit" className="submit-button">
                   Confirmar Pedido
                 </button>
                 <button

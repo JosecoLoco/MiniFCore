@@ -294,25 +294,9 @@ def get_pedidos(current_user):
 def crear_pedido(current_user):
     try:
         pedido = request.json
-        
-        # Validar que la fecha de entrega esté presente y sea válida
-        if 'fecha_entrega' not in pedido:
-            return jsonify({"error": "La fecha de entrega es requerida"}), 400
-            
-        try:
-            fecha_entrega = datetime.strptime(pedido['fecha_entrega'], '%Y-%m-%d')
-        except ValueError:
-            return jsonify({"error": "Formato de fecha inválido. Use YYYY-MM-DD"}), 400
-            
-        # Verificar que la fecha no sea en el pasado
-        if fecha_entrega.date() < datetime.now().date():
-            return jsonify({"error": "La fecha de entrega no puede ser en el pasado"}), 400
-        
         pedido['cliente_id'] = str(current_user['_id'])
         pedido['fecha_creacion'] = datetime.utcnow()
-        pedido['fecha_entrega'] = fecha_entrega
         pedido['estado'] = 'pendiente'
-        
         resultado = db.pedidos.insert_one(pedido)
         return jsonify({"mensaje": "Pedido creado", "id": str(resultado.inserted_id)})
     except Exception as e:
@@ -517,86 +501,18 @@ def eliminar_filamento(current_user, filamento_id):
 
 @app.route('/pedidos/flujo/<fecha>', methods=['GET'])
 @token_required
-def get_flujo_pedidos(current_user, fecha):
+def analizar_flujo_pedidos(current_user, fecha):
     if not current_user.get('is_admin', False):
         return jsonify({'error': 'No autorizado'}), 403
-        
+    
     try:
-        # Convertir la fecha de string a datetime
-        fecha_entrega = datetime.strptime(fecha, '%Y-%m-%d')
+        pedido_flow = PedidoFlow()
+        reporte = pedido_flow.generar_reporte(fecha)
         
-        # Obtener todos los pedidos para esa fecha
-        pedidos = list(db.pedidos.find({
-            'fecha_entrega': fecha_entrega,
-            'estado': {'$in': ['pendiente', 'en_proceso']}
-        }))
-        
-        # Obtener información de productos y filamentos
-        productos = {str(p['_id']): p for p in db.productos.find()}
-        filamentos = {str(f['_id']): f for f in db.filamentos.find()}
-        
-        # Analizar el stock necesario
-        filamentos_necesarios = {}
-        problemas_stock = []
-        
-        for pedido in pedidos:
-            producto = productos.get(str(pedido['producto_id']))
-            if not producto:
-                continue
-                
-            for filamento_id in producto.get('filamentos', []):
-                filamento = filamentos.get(str(filamento_id))
-                if not filamento:
-                    continue
-                    
-                cantidad_necesaria = pedido['cantidad']
-                
-                if str(filamento_id) not in filamentos_necesarios:
-                    filamentos_necesarios[str(filamento_id)] = {
-                        'nombre': filamento['nombre'],
-                        'stock_actual': filamento['stock'],
-                        'cantidad_necesaria': 0,
-                        'productos': []
-                    }
-                
-                filamentos_necesarios[str(filamento_id)]['cantidad_necesaria'] += cantidad_necesaria
-                filamentos_necesarios[str(filamento_id)]['productos'].append({
-                    'nombre_producto': producto['nombre'],
-                    'cantidad': cantidad_necesaria
-                })
-        
-        # Verificar problemas de stock
-        for filamento_id, info in filamentos_necesarios.items():
-            if info['stock_actual'] < info['cantidad_necesaria']:
-                problemas_stock.append({
-                    'nombre': info['nombre'],
-                    'stock_actual': info['stock_actual'],
-                    'cantidad_necesaria': info['cantidad_necesaria'],
-                    'diferencia': info['cantidad_necesaria'] - info['stock_actual'],
-                    'productos_afectados': info['productos']
-                })
-        
-        # Preparar la respuesta
-        response = {
-            'fecha_entrega': fecha,
-            'total_pedidos': len(pedidos),
-            'tiene_problemas_stock': len(problemas_stock) > 0,
-            'analisis_stock': {
-                'problemas_stock': problemas_stock,
-                'filamentos_necesarios': filamentos_necesarios
-            },
-            'pedidos': [{
-                'id': str(pedido['_id']),
-                'producto': productos.get(str(pedido['producto_id']), {}).get('nombre', 'Producto no encontrado'),
-                'cantidad': pedido['cantidad'],
-                'estado': pedido['estado']
-            } for pedido in pedidos]
-        }
-        
-        return jsonify(response)
-        
-    except ValueError:
-        return jsonify({'error': 'Formato de fecha inválido'}), 400
+        if reporte is None:
+            return jsonify({'error': 'Error al generar el reporte'}), 500
+            
+        return jsonify(reporte)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
