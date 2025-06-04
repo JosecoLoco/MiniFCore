@@ -16,7 +16,8 @@ function UserDashboard() {
     cantidad: 1,
     especificaciones: '',
     direccion_entrega: '',
-    telefono: ''
+    telefono: '',
+    fecha_entrega: new Date().toISOString().split('T')[0]
   });
 
   useEffect(() => {
@@ -88,6 +89,7 @@ function UserDashboard() {
         especificaciones: formData.especificaciones,
         direccion_entrega: formData.direccion_entrega,
         telefono: formData.telefono,
+        fecha_entrega: formData.fecha_entrega,
         estado: 'pendiente',
         fecha: new Date().toISOString()
       };
@@ -100,7 +102,8 @@ function UserDashboard() {
         cantidad: 1,
         especificaciones: '',
         direccion_entrega: '',
-        telefono: ''
+        telefono: '',
+        fecha_entrega: new Date().toISOString().split('T')[0]
       });
       
       // Actualizar la lista de pedidos
@@ -204,7 +207,8 @@ function UserDashboard() {
                   <th>Dirección</th>
                   <th>Especificaciones</th>
                   <th>Estado</th>
-                  <th>Fecha</th>
+                  <th>Fecha Creación</th>
+                  <th>Fecha Entrega</th>
                 </tr>
               </thead>
               <tbody>
@@ -223,6 +227,7 @@ function UserDashboard() {
                       </span>
                     </td>
                     <td>{new Date(pedido.fecha).toLocaleDateString()}</td>
+                    <td>{new Date(pedido.fecha_entrega).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -273,6 +278,17 @@ function UserDashboard() {
                   name="telefono"
                   value={formData.telefono}
                   onChange={handleInputChange}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Fecha de entrega deseada:</label>
+                <input
+                  type="date"
+                  name="fecha_entrega"
+                  value={formData.fecha_entrega}
+                  onChange={handleInputChange}
+                  min={new Date().toISOString().split('T')[0]}
                   required
                 />
               </div>

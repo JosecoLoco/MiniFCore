@@ -8,6 +8,7 @@ import jwt
 from datetime import datetime, timedelta
 from functools import wraps
 from pedido_flow import PedidoFlow
+from sugerencias_flow import SugerenciasFlow
 
 # Cargar variables de entorno
 load_dotenv()
@@ -34,7 +35,7 @@ try:
 except Exception as e:
     print(f"Error al conectar con MongoDB: {e}")
 
-# Función para generar token JWT
+
 def generate_token(user_id, rol):
     payload = {
         'user_id': str(user_id),
@@ -255,38 +256,72 @@ def eliminar_producto(current_user, producto_id):
 # Rutas para Pedidos
 @app.route('/pedidos', methods=['GET'])
 @token_required
-def get_pedidos(current_user):
+def obtener_pedidos(current_user):
     try:
-        # Si es administrador, obtener todos los pedidos
-        if current_user.get('is_admin', False):
-            pedidos = list(db.pedidos.find())
-        else:
-            # Si es usuario normal, obtener solo sus pedidos
-            pedidos = list(db.pedidos.find({'cliente_id': str(current_user['_id'])}))
+        print("Iniciando obtención de pedidos...")
         
-        # Para cada pedido, obtener la información del producto y del cliente
+        # Obtener todos los pedidos
+        pedidos = list(db.pedidos.find())
+        print(f"Pedidos encontrados: {len(pedidos)}")
+        
+        # Convertir ObjectId a string y agregar información del producto
+        pedidos_procesados = []
         for pedido in pedidos:
-            pedido['_id'] = str(pedido['_id'])
-            
-            # Obtener información del producto
-            if 'producto_id' in pedido:
-                producto = db.productos.find_one({'_id': ObjectId(pedido['producto_id'])})
-                if producto:
-                    producto['_id'] = str(producto['_id'])
-                    pedido['producto'] = producto
-            
-            # Obtener información del cliente
-            if 'cliente_id' in pedido:
-                cliente = db.users.find_one({'_id': ObjectId(pedido['cliente_id'])})
-                if cliente:
-                    cliente['_id'] = str(cliente['_id'])
-                    # No enviar información sensible del cliente
-                    if 'password' in cliente:
-                        del cliente['password']
-                    pedido['cliente'] = cliente
+            try:
+                print(f"Procesando pedido: {pedido.get('_id')}")
+                
+                # Convertir ObjectId a string
+                pedido['_id'] = str(pedido['_id'])
+                
+                # Obtener información del producto
+                if 'producto_id' in pedido:
+                    producto = db.productos.find_one({'_id': ObjectId(pedido['producto_id'])})
+                    if producto:
+                        pedido['producto'] = {
+                            '_id': str(producto['_id']),
+                            'nombre': producto.get('nombre', 'Producto no disponible'),
+                            'precio': producto.get('precio', 0)
+                        }
+                    else:
+                        print(f"Producto no encontrado para pedido {pedido['_id']}")
+                
+                # Obtener información del cliente
+                if 'cliente_id' in pedido:
+                    cliente = db.usuarios.find_one({'_id': ObjectId(pedido['cliente_id'])})
+                    if cliente:
+                        pedido['cliente'] = {
+                            '_id': str(cliente['_id']),
+                            'nombre': cliente.get('nombre', 'Cliente no disponible'),
+                            'email': cliente.get('email', '')
+                        }
+                    else:
+                        print(f"Cliente no encontrado para pedido {pedido['_id']}")
+                
+                # Convertir fechas
+                if 'fecha' in pedido:
+                    if isinstance(pedido['fecha'], datetime):
+                        pedido['fecha'] = pedido['fecha'].strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        print(f"Fecha inválida en pedido {pedido['_id']}")
+                
+                if 'fecha_entrega' in pedido:
+                    if isinstance(pedido['fecha_entrega'], datetime):
+                        pedido['fecha_entrega'] = pedido['fecha_entrega'].strftime('%Y-%m-%d')
+                    else:
+                        print(f"Fecha de entrega inválida en pedido {pedido['_id']}")
+                
+                pedidos_procesados.append(pedido)
+                print(f"Pedido {pedido['_id']} procesado correctamente")
+                
+            except Exception as e:
+                print(f"Error procesando pedido {pedido.get('_id')}: {e}")
+                continue
         
-        return jsonify(pedidos)
+        print(f"Total de pedidos procesados: {len(pedidos_procesados)}")
+        return jsonify(pedidos_procesados)
+        
     except Exception as e:
+        print(f"Error general al obtener pedidos: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/pedidos', methods=['POST'])
@@ -302,32 +337,94 @@ def crear_pedido(current_user):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/pedidos/<pedido_id>/estado', methods=['PUT', 'OPTIONS'])
+@app.route('/pedidos/<pedido_id>/estado', methods=['PUT'])
 @token_required
 def actualizar_estado_pedido(current_user, pedido_id):
-    if request.method == 'OPTIONS':
-        return '', 200
     try:
-        nuevo_estado = request.json.get('estado')
+        print(f"Iniciando actualización de estado para pedido: {pedido_id}")
+        data = request.get_json()
+        nuevo_estado = data.get('estado')
+        
         if not nuevo_estado:
-            return jsonify({'mensaje': 'Estado no proporcionado'}), 400
-
-        # Verificar que el estado sea válido
-        estados_validos = ['pendiente', 'en_proceso', 'enviado']
-        if nuevo_estado not in estados_validos:
-            return jsonify({'mensaje': 'Estado no válido'}), 400
-
-        resultado = db.pedidos.update_one(
-            {'_id': ObjectId(pedido_id)},
-            {'$set': {'estado': nuevo_estado}}
-        )
-
-        if resultado.modified_count == 0:
-            return jsonify({'mensaje': 'Pedido no encontrado'}), 404
-
-        return jsonify({'mensaje': 'Estado actualizado correctamente'})
+            return jsonify({'error': 'No se proporcionó un nuevo estado'}), 400
+            
+        print(f"Nuevo estado: {nuevo_estado}")
+        
+        # Obtener el pedido actual
+        pedido = db.pedidos.find_one({'_id': ObjectId(pedido_id)})
+        if not pedido:
+            print(f"Pedido no encontrado: {pedido_id}")
+            return jsonify({'error': 'Pedido no encontrado'}), 404
+            
+        print(f"Pedido encontrado: {pedido}")
+        
+        # Si el nuevo estado es 'en_proceso', reducir el stock de filamentos
+        if nuevo_estado == 'en_proceso':
+            print("Procesando reducción de stock...")
+            # Obtener el producto asociado al pedido
+            producto = db.productos.find_one({'_id': ObjectId(pedido['producto_id'])})
+            if not producto:
+                print(f"Producto no encontrado para pedido: {pedido_id}")
+                return jsonify({'error': 'Producto no encontrado'}), 404
+                
+            print(f"Producto encontrado: {producto}")
+            
+            # Obtener los filamentos del producto
+            if 'filamentos' in producto:
+                print(f"Filamentos encontrados: {producto['filamentos']}")
+                for filamento_id in producto['filamentos']:
+                    try:
+                        # Verificar stock actual
+                        filamento = db.filamentos.find_one({'_id': filamento_id})
+                        if not filamento:
+                            print(f"Filamento no encontrado: {filamento_id}")
+                            continue
+                            
+                        # Convertir stock a entero
+                        stock_actual = int(str(filamento.get('stock', '0')).replace(',', ''))
+                        cantidad_pedido = int(pedido.get('cantidad', 0))
+                        
+                        if stock_actual < cantidad_pedido:
+                            print(f"Stock insuficiente para filamento {filamento_id}")
+                            return jsonify({
+                                'error': f'Stock insuficiente para {filamento.get("nombre", "filamento")}',
+                                'stock_actual': stock_actual,
+                                'cantidad_necesaria': cantidad_pedido
+                            }), 400
+                            
+                        # Actualizar el stock del filamento
+                        nuevo_stock = stock_actual - cantidad_pedido
+                        resultado = db.filamentos.update_one(
+                            {'_id': filamento_id},
+                            {'$set': {'stock': nuevo_stock}}
+                        )
+                        print(f"Stock actualizado para filamento {filamento_id}: {nuevo_stock}")
+                        
+                    except Exception as e:
+                        print(f"Error actualizando stock de filamento {filamento_id}: {e}")
+                        return jsonify({'error': f'Error actualizando stock: {str(e)}'}), 500
+        
+        # Actualizar el estado del pedido
+        try:
+            resultado = db.pedidos.update_one(
+                {'_id': ObjectId(pedido_id)},
+                {'$set': {'estado': nuevo_estado}}
+            )
+            
+            if resultado.modified_count == 0:
+                print("No se pudo actualizar el estado del pedido")
+                return jsonify({'error': 'No se pudo actualizar el estado del pedido'}), 400
+                
+            print(f"Estado del pedido actualizado a: {nuevo_estado}")
+            return jsonify({'mensaje': 'Estado actualizado correctamente'})
+            
+        except Exception as e:
+            print(f"Error actualizando estado del pedido: {e}")
+            return jsonify({'error': f'Error actualizando estado: {str(e)}'}), 500
+            
     except Exception as e:
-        return jsonify({'mensaje': str(e)}), 500
+        print(f"Error general en actualizar_estado_pedido: {e}")
+        return jsonify({'error': str(e)}), 500
 
 # Rutas para Categorías
 @app.route('/categorias', methods=['GET', 'OPTIONS'])
@@ -515,6 +612,45 @@ def analizar_flujo_pedidos(current_user, fecha):
         return jsonify(reporte)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/sugerencias', methods=['GET'])
+@token_required
+def obtener_sugerencias(current_user):
+    if not current_user.get('is_admin', False):
+        return jsonify({'error': 'No autorizado'}), 403
+        
+    try:
+        sugerencias_flow = SugerenciasFlow()
+        reporte = sugerencias_flow.generar_reporte_sugerencias()
+        
+        if reporte is None:
+            return jsonify({'error': 'Error al generar sugerencias'}), 500
+            
+        return jsonify(reporte)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def asegurar_stock_numerico():
+    """
+    Asegura que todos los filamentos tengan su stock como número
+    """
+    try:
+        filamentos = db.filamentos.find({})
+        for filamento in filamentos:
+            stock_actual = filamento.get('stock')
+            if isinstance(stock_actual, str):
+                # Convertir a número
+                nuevo_stock = int(str(stock_actual).replace(',', ''))
+                db.filamentos.update_one(
+                    {'_id': filamento['_id']},
+                    {'$set': {'stock': nuevo_stock}}
+                )
+                print(f"Stock actualizado para filamento {filamento['_id']}: {nuevo_stock}")
+    except Exception as e:
+        print(f"Error asegurando stock numérico: {e}")
+
+# Llamar a la función al iniciar la aplicación
+asegurar_stock_numerico()
 
 if __name__ == '__main__':
     try:

@@ -38,6 +38,35 @@ function AdminDashboard() {
     diametro: '',
     stock: ''
   });
+  const [sugerencias, setSugerencias] = useState({
+    tendencias: {
+      mes_actual: {
+        mes: new Date().getMonth() + 1,
+        total_pedidos: 0,
+        colores_sugeridos: [],
+        eventos: []
+      },
+      mes_siguiente: {
+        mes: (new Date().getMonth() + 2) % 12,
+        colores_sugeridos: [],
+        eventos: []
+      },
+      meses_mas_pedidos: []
+    },
+    stock: {
+      stock_bajo: [],
+      stock_medio: [],
+      stock_alto: [],
+      necesidades_inmediatas: [],
+      stock_bajo_necesidades: [],
+      stock_medio_necesidades: [],
+      stock_alto_necesidades: []
+    },
+    pedidos_pendientes: [],
+    resumen: {
+      total_pedidos_pendientes: 0
+    }
+  });
 
   useEffect(() => {
     fetchData();
@@ -74,6 +103,9 @@ function AdminDashboard() {
       } else if (activeTab === 'filamentos') {
         const response = await axios.get('http://localhost:5000/filamentos', { headers });
         setFilamentos(response.data);
+      } else if (activeTab === 'sugerencias') {
+        const response = await axios.get('http://localhost:5000/sugerencias', { headers });
+        setSugerencias(response.data);
       }
       setLoading(false);
     } catch (err) {
@@ -305,14 +337,25 @@ function AdminDashboard() {
         'Content-Type': 'application/json'
       };
 
-      await axios.put(`http://localhost:5000/pedidos/${pedidoId}/estado`, 
+      const response = await axios.put(
+        `http://localhost:5000/pedidos/${pedidoId}/estado`, 
         { estado: nuevoEstado },
         { headers }
       );
 
+      if (response.data.error) {
+        setError(response.data.error);
+        return;
+      }
+
+      // Mostrar mensaje de éxito
+      alert('Estado actualizado correctamente');
+      
+      // Actualizar la lista de pedidos
       fetchData();
     } catch (err) {
-      setError('Error al actualizar el estado del pedido');
+      console.error('Error al actualizar estado:', err);
+      setError(err.response?.data?.error || 'Error al actualizar el estado del pedido');
     }
   };
 
@@ -352,6 +395,12 @@ function AdminDashboard() {
           onClick={() => setActiveTab('filamentos')}
         >
           Filamentos
+        </button>
+        <button 
+          className={`tab-button ${activeTab === 'sugerencias' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sugerencias')}
+        >
+          Sugerencias
         </button>
       </div>
 
@@ -502,7 +551,7 @@ function AdminDashboard() {
             </table>
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'filamentos' ? (
         <div className="filamentos-section">
           <button className="add-button" onClick={() => setShowFilamentoModal(true)}>
             Agregar Nuevo Filamento
@@ -548,6 +597,106 @@ function AdminDashboard() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      ) : activeTab === 'sugerencias' && sugerencias && (
+        <div className="sugerencias-section">
+          {/* Resumen General */}
+          <div className="sugerencias-card resumen-general">
+            <h3>Resumen General</h3>
+            <div className="estadisticas-pedidos">
+              <div className="estadistica">
+                <span className="numero">{sugerencias.resumen.total_pedidos_pendientes}</span>
+                <span className="label">Total Pedidos</span>
+              </div>
+              <div className="estadistica">
+                <span className="numero error">{sugerencias.resumen.pedidos_sin_stock}</span>
+                <span className="label">Sin Stock</span>
+              </div>
+              <div className="estadistica">
+                <span className="numero success">{sugerencias.resumen.pedidos_con_stock}</span>
+                <span className="label">Con Stock</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Alertas de Stock */}
+          {sugerencias.alertas_stock && sugerencias.alertas_stock.length > 0 && (
+            <div className="sugerencias-card alertas-stock">
+              <h3>⚠️ Alertas de Stock</h3>
+              <div className="resumen-alertas">
+                <p>Hay {sugerencias.alertas_stock.length} pedidos que no pueden ser procesados por falta de stock</p>
+              </div>
+              <div className="alertas-grid">
+                {sugerencias.alertas_stock.map((alerta, index) => (
+                  <div key={index} className="alerta-stock-insuficiente">
+                    <div className="alerta-header">
+                      <h4>Pedido #{alerta.pedido_id.slice(-4)}</h4>
+                      <span className="estado-badge pendiente">Pendiente</span>
+                    </div>
+                    <div className="alerta-detalles">
+                      <p><strong>Producto:</strong> {alerta.producto_nombre}</p>
+                      <p><strong>Cantidad:</strong> {alerta.cantidad}</p>
+                      <p><strong>Fecha Entrega:</strong> {new Date(alerta.fecha_entrega).toLocaleDateString()}</p>
+                    </div>
+                    <div className="filamentos-insuficientes">
+                      <h5>Filamentos Faltantes:</h5>
+                      <ul>
+                        {alerta.filamentos_insuficientes.map((filamento, fIndex) => (
+                          <li key={fIndex}>
+                            <span className="color-filamento" style={{backgroundColor: filamento.color.toLowerCase()}}></span>
+                            {filamento.nombre} - 
+                            Stock: {filamento.stock_actual} / 
+                            Necesario: {filamento.cantidad_necesaria}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pedidos Pendientes y En Proceso */}
+          <div className="sugerencias-card pedidos-activos">
+            <h3>Pedidos Activos</h3>
+            <div className="tabla-pedidos">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th>Fecha Entrega</th>
+                    <th>Estado</th>
+                    <th>Stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sugerencias.pedidos_pendientes.map((pedido, index) => (
+                    <tr key={index} className={pedido.tiene_stock_suficiente ? 'stock-ok' : 'stock-error'}>
+                      <td>#{pedido.pedido_id.slice(-4)}</td>
+                      <td>{pedido.producto_nombre}</td>
+                      <td>{pedido.cantidad}</td>
+                      <td>{new Date(pedido.fecha_entrega).toLocaleDateString()}</td>
+                      <td>
+                        <span className={`estado-badge ${pedido.estado}`}>
+                          {pedido.estado === 'pendiente' ? 'Pendiente' : 'En Proceso'}
+                        </span>
+                      </td>
+                      <td>
+                        {pedido.tiene_stock_suficiente ? (
+                          <span className="stock-status ok">✓ Suficiente</span>
+                        ) : (
+                          <span className="stock-status error">✗ Insuficiente</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

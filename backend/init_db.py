@@ -1,5 +1,6 @@
 from pymongo import MongoClient
 from bson import ObjectId
+from init_filamentos import init_filamentos
 
 # Conectar a MongoDB
 client = MongoClient('mongodb://localhost:27017/')
@@ -34,4 +35,16 @@ for categoria in categorias:
         db.categorias.insert_one(categoria)
         print(f"Categoría {categoria['nombre']} creada exitosamente")
 
-print("Inicialización de la base de datos completada") 
+print("Inicialización de la base de datos completada")
+
+def init_database():
+    print("Iniciando la configuración de la base de datos...")
+    
+    # Inicializar filamentos
+    if init_filamentos():
+        print("✓ Filamentos PLA inicializados correctamente")
+    else:
+        print("✗ Error al inicializar filamentos")
+
+if __name__ == "__main__":
+    init_database() 
