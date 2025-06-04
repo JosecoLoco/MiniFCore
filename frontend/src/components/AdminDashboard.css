@@ -231,26 +231,22 @@ tr:hover {
   padding: 0.5rem;
   border-radius: 4px;
   border: 1px solid #ddd;
-  font-size: 0.9rem;
+  background-color: white;
   cursor: pointer;
-  transition: all 0.2s;
 }
 
 .estado-select.pendiente {
   background-color: #fff3cd;
-  color: #856404;
   border-color: #ffeeba;
 }
 
 .estado-select.en_proceso {
   background-color: #cce5ff;
-  color: #004085;
   border-color: #b8daff;
 }
 
 .estado-select.enviado {
   background-color: #d4edda;
-  color: #155724;
   border-color: #c3e6cb;
 }
 

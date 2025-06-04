@@ -329,11 +329,49 @@ def obtener_pedidos(current_user):
 def crear_pedido(current_user):
     try:
         pedido = request.json
-        pedido['cliente_id'] = str(current_user['_id'])
-        pedido['fecha_creacion'] = datetime.utcnow()
-        pedido['estado'] = 'pendiente'
-        resultado = db.pedidos.insert_one(pedido)
-        return jsonify({"mensaje": "Pedido creado", "id": str(resultado.inserted_id)})
+        
+        # Validar datos requeridos
+        required_fields = ['producto_id', 'cantidad', 'color_seleccionado', 
+                         'direccion_entrega', 'telefono', 'fecha_entrega']
+        for field in required_fields:
+            if field not in pedido:
+                return jsonify({'error': f'Campo requerido: {field}'}), 400
+
+        # Validar que el color seleccionado existe para el producto
+        producto = db.productos.find_one({'_id': ObjectId(pedido['producto_id'])})
+        if not producto:
+            return jsonify({'error': 'Producto no encontrado'}), 404
+
+        color_valido = False
+        for filamento_id in producto.get('filamentos', []):
+            filamento = db.filamentos.find_one({'_id': filamento_id})
+            if filamento and filamento['color'] == pedido['color_seleccionado']:
+                color_valido = True
+                break
+
+        if not color_valido:
+            return jsonify({'error': 'Color de filamento no válido para este producto'}), 400
+
+        # Crear el pedido
+        pedido_data = {
+            'cliente_id': str(current_user['_id']),
+            'producto_id': pedido['producto_id'],
+            'cantidad': int(pedido['cantidad']),
+            'color_seleccionado': pedido['color_seleccionado'],
+            'direccion_entrega': pedido['direccion_entrega'],
+            'telefono': pedido['telefono'],
+            'especificaciones': pedido.get('especificaciones', ''),
+            'fecha_entrega': pedido['fecha_entrega'],
+            'estado': 'pendiente',
+            'fecha_creacion': datetime.utcnow()
+        }
+
+        resultado = db.pedidos.insert_one(pedido_data)
+        return jsonify({
+            "mensaje": "Pedido creado exitosamente",
+            "id": str(resultado.inserted_id)
+        }), 201
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -358,7 +396,7 @@ def actualizar_estado_pedido(current_user, pedido_id):
             
         print(f"Pedido encontrado: {pedido}")
         
-        # Si el nuevo estado es 'en_proceso', reducir el stock de filamentos
+        # Si el nuevo estado es 'en_proceso', reducir el stock del filamento seleccionado
         if nuevo_estado == 'en_proceso':
             print("Procesando reducción de stock...")
             # Obtener el producto asociado al pedido
@@ -369,40 +407,45 @@ def actualizar_estado_pedido(current_user, pedido_id):
                 
             print(f"Producto encontrado: {producto}")
             
-            # Obtener los filamentos del producto
-            if 'filamentos' in producto:
-                print(f"Filamentos encontrados: {producto['filamentos']}")
-                for filamento_id in producto['filamentos']:
-                    try:
-                        # Verificar stock actual
-                        filamento = db.filamentos.find_one({'_id': filamento_id})
-                        if not filamento:
-                            print(f"Filamento no encontrado: {filamento_id}")
-                            continue
-                            
-                        # Convertir stock a entero
-                        stock_actual = int(str(filamento.get('stock', '0')).replace(',', ''))
-                        cantidad_pedido = int(pedido.get('cantidad', 0))
-                        
-                        if stock_actual < cantidad_pedido:
-                            print(f"Stock insuficiente para filamento {filamento_id}")
-                            return jsonify({
-                                'error': f'Stock insuficiente para {filamento.get("nombre", "filamento")}',
-                                'stock_actual': stock_actual,
-                                'cantidad_necesaria': cantidad_pedido
-                            }), 400
-                            
-                        # Actualizar el stock del filamento
-                        nuevo_stock = stock_actual - cantidad_pedido
-                        resultado = db.filamentos.update_one(
-                            {'_id': filamento_id},
-                            {'$set': {'stock': nuevo_stock}}
-                        )
-                        print(f"Stock actualizado para filamento {filamento_id}: {nuevo_stock}")
-                        
-                    except Exception as e:
-                        print(f"Error actualizando stock de filamento {filamento_id}: {e}")
-                        return jsonify({'error': f'Error actualizando stock: {str(e)}'}), 500
+            # Obtener el color seleccionado del pedido
+            color_seleccionado = pedido.get('color_seleccionado')
+            if not color_seleccionado:
+                return jsonify({'error': 'No se especificó el color del filamento'}), 400
+
+            # Buscar el filamento con el color seleccionado
+            filamento_encontrado = None
+            for filamento_id in producto.get('filamentos', []):
+                filamento = db.filamentos.find_one({'_id': filamento_id})
+                if filamento and filamento['color'] == color_seleccionado:
+                    filamento_encontrado = filamento
+                    break
+
+            if not filamento_encontrado:
+                return jsonify({'error': f'No se encontró el filamento de color {color_seleccionado}'}), 404
+
+            # Verificar y actualizar el stock del filamento seleccionado
+            try:
+                stock_actual = int(str(filamento_encontrado.get('stock', '0')).replace(',', ''))
+                cantidad_pedido = int(pedido.get('cantidad', 0))
+                
+                if stock_actual < cantidad_pedido:
+                    return jsonify({
+                        'error': f'Stock insuficiente para el filamento {color_seleccionado}',
+                        'stock_actual': stock_actual,
+                        'cantidad_necesaria': cantidad_pedido
+                    }), 400
+                    
+                # Actualizar el stock del filamento seleccionado
+                nuevo_stock = stock_actual - cantidad_pedido
+                resultado = db.filamentos.update_one(
+                    {'_id': filamento_encontrado['_id']},
+                    {'$set': {'stock': nuevo_stock}}
+                )
+                print(f"Stock actualizado para filamento {color_seleccionado}: {nuevo_stock}")
+                
+            except Exception as e:
+                print(f"Error actualizando stock de filamento: {e}")
+                return jsonify({'error': f'Error actualizando stock: {str(e)}'}), 500
         
         # Actualizar el estado del pedido
         try:
@@ -424,6 +467,29 @@ def actualizar_estado_pedido(current_user, pedido_id):
             
     except Exception as e:
         print(f"Error general en actualizar_estado_pedido: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/pedidos/<pedido_id>', methods=['DELETE'])
+@token_required
+def eliminar_pedido(current_user, pedido_id):
+    if not current_user.get('is_admin', False):
+        return jsonify({'error': 'No autorizado'}), 403
+        
+    try:
+        # Verificar si el pedido existe
+        pedido = db.pedidos.find_one({'_id': ObjectId(pedido_id)})
+        if not pedido:
+            return jsonify({'error': 'Pedido no encontrado'}), 404
+            
+        # Eliminar el pedido
+        resultado = db.pedidos.delete_one({'_id': ObjectId(pedido_id)})
+        
+        if resultado.deleted_count == 0:
+            return jsonify({'error': 'No se pudo eliminar el pedido'}), 400
+            
+        return jsonify({'mensaje': 'Pedido eliminado correctamente'})
+        
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 # Rutas para Categorías

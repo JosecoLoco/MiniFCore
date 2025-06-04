@@ -17,7 +17,8 @@ function UserDashboard() {
     especificaciones: '',
     direccion_entrega: '',
     telefono: '',
-    fecha_entrega: new Date().toISOString().split('T')[0]
+    fecha_entrega: new Date().toISOString().split('T')[0],
+    color_seleccionado: ''
   });
 
   useEffect(() => {
@@ -86,6 +87,7 @@ function UserDashboard() {
       const pedidoData = {
         producto_id: productoSeleccionado._id,
         cantidad: formData.cantidad,
+        color_seleccionado: formData.color_seleccionado,
         especificaciones: formData.especificaciones,
         direccion_entrega: formData.direccion_entrega,
         telefono: formData.telefono,
@@ -103,7 +105,8 @@ function UserDashboard() {
         especificaciones: '',
         direccion_entrega: '',
         telefono: '',
-        fecha_entrega: new Date().toISOString().split('T')[0]
+        fecha_entrega: new Date().toISOString().split('T')[0],
+        color_seleccionado: ''
       });
       
       // Actualizar la lista de pedidos
@@ -113,7 +116,12 @@ function UserDashboard() {
       
       alert('Pedido realizado con éxito');
     } catch (err) {
-      setError('Error al realizar el pedido');
+      if (err.response && err.response.data && err.response.data.error) {
+        setError(err.response.data.error);
+      } else {
+        setError('Error al realizar el pedido');
+      }
+      console.error('Error completo:', err);
     }
   };
 
@@ -252,6 +260,24 @@ function UserDashboard() {
                   required
                 />
               </div>
+              
+              <div className="form-group">
+                <label>Color del filamento:</label>
+                <select
+                  name="color_seleccionado"
+                  value={formData.color_seleccionado}
+                  onChange={handleInputChange}
+                  required
+                >
+                  <option value="">Seleccione un color</option>
+                  {productoSeleccionado.filamentos?.map((filamento, index) => (
+                    <option key={index} value={filamento.color}>
+                      {filamento.color} - {filamento.material}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="form-group">
                 <label>Especificaciones adicionales:</label>
                 <textarea
@@ -261,6 +287,7 @@ function UserDashboard() {
                   placeholder="Detalles adicionales del pedido..."
                 />
               </div>
+
               <div className="form-group">
                 <label>Dirección de entrega:</label>
                 <input
@@ -269,8 +296,10 @@ function UserDashboard() {
                   value={formData.direccion_entrega}
                   onChange={handleInputChange}
                   required
+                  placeholder="Ingrese su dirección completa"
                 />
               </div>
+
               <div className="form-group">
                 <label>Teléfono de contacto:</label>
                 <input
@@ -279,8 +308,12 @@ function UserDashboard() {
                   value={formData.telefono}
                   onChange={handleInputChange}
                   required
+                  placeholder="Ingrese su número de teléfono"
+                  pattern="[0-9]{10}"
+                  title="Ingrese un número de teléfono válido de 10 dígitos"
                 />
               </div>
+
               <div className="form-group">
                 <label>Fecha de entrega deseada:</label>
                 <input
@@ -288,21 +321,19 @@ function UserDashboard() {
                   name="fecha_entrega"
                   value={formData.fecha_entrega}
                   onChange={handleInputChange}
-                  min={new Date().toISOString().split('T')[0]}
                   required
+                  min={new Date().toISOString().split('T')[0]}
                 />
               </div>
+
               <div className="modal-buttons">
                 <button type="submit" className="submit-button">
                   Confirmar Pedido
                 </button>
-                <button
-                  type="button"
+                <button 
+                  type="button" 
                   className="cancel-button"
-                  onClick={() => {
-                    setShowModal(false);
-                    setProductoSeleccionado(null);
-                  }}
+                  onClick={() => setShowModal(false)}
                 >
                   Cancelar
                 </button>

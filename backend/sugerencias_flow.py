@@ -13,58 +13,6 @@ class SugerenciasFlow:
             self.STOCK_MEDIO = 10  # Stock medio: entre 5 y 10 unidades
             # Stock alto: más de 10 unidades
             
-            # Mantener los colores por mes...
-            self.colores_por_mes = {
-                1: {  # Enero
-                    'colores': ['Blanco', 'Dorado', 'Azul'],
-                    'eventos': ['Año Nuevo', 'Reyes Magos']
-                },
-                2: {  # Febrero
-                    'colores': ['Rojo', 'Rosa', 'Blanco'],
-                    'eventos': ['San Valentín', 'Carnaval']
-                },
-                3: {  # Marzo
-                    'colores': ['Verde', 'Dorado', 'Blanco'],
-                    'eventos': ['San Patricio', 'Primavera']
-                },
-                4: {  # Abril
-                    'colores': ['Morado', 'Amarillo', 'Blanco'],
-                    'eventos': ['Semana Santa', 'Pascua']
-                },
-                5: {  # Mayo
-                    'colores': ['Rosa', 'Blanco', 'Rojo'],
-                    'eventos': ['Día de la Madre', 'Cinco de Mayo']
-                },
-                6: {  # Junio
-                    'colores': ['Azul', 'Rojo', 'Amarillo'],
-                    'eventos': ['Día del Padre', 'Verano']
-                },
-                7: {  # Julio
-                    'colores': ['Rojo', 'Azul', 'Blanco'],
-                    'eventos': ['Fiestas Patrias', 'Verano']
-                },
-                8: {  # Agosto
-                    'colores': ['Verde', 'Blanco', 'Rojo'],
-                    'eventos': ['Verano', 'Fiestas Locales']
-                },
-                9: {  # Septiembre
-                    'colores': ['Verde', 'Blanco', 'Rojo'],
-                    'eventos': ['Fiestas Patrias', 'Independencia']
-                },
-                10: {  # Octubre
-                    'colores': ['Naranja', 'Negro', 'Morado'],
-                    'eventos': ['Halloween', 'Día de Muertos']
-                },
-                11: {  # Noviembre
-                    'colores': ['Negro', 'Morado', 'Dorado'],
-                    'eventos': ['Día de Muertos', 'Buen Fin']
-                },
-                12: {  # Diciembre
-                    'colores': ['Rojo', 'Verde', 'Dorado'],
-                    'eventos': ['Navidad', 'Año Nuevo']
-                }
-            }
-            
         except Exception as e:
             print(f"Error al conectar con MongoDB: {e}")
             raise e
@@ -95,14 +43,10 @@ class SugerenciasFlow:
             tendencias = {
                 'mes_actual': {
                     'mes': mes_actual,
-                    'total_pedidos': len(pedidos_por_mes.get(mes_actual, [])),
-                    'colores_sugeridos': self.colores_por_mes[mes_actual]['colores'],
-                    'eventos': self.colores_por_mes[mes_actual]['eventos']
+                    'total_pedidos': len(pedidos_por_mes.get(mes_actual, []))
                 },
                 'mes_siguiente': {
-                    'mes': (mes_actual % 12) + 1,
-                    'colores_sugeridos': self.colores_por_mes[(mes_actual % 12) + 1]['colores'],
-                    'eventos': self.colores_por_mes[(mes_actual % 12) + 1]['eventos']
+                    'mes': (mes_actual % 12) + 1
                 },
                 'meses_mas_pedidos': []
             }
@@ -111,9 +55,7 @@ class SugerenciasFlow:
             for mes, pedidos_mes in pedidos_por_mes.items():
                 tendencias['meses_mas_pedidos'].append({
                     'mes': mes,
-                    'total_pedidos': len(pedidos_mes),
-                    'colores_sugeridos': self.colores_por_mes[mes]['colores'],
-                    'eventos': self.colores_por_mes[mes]['eventos']
+                    'total_pedidos': len(pedidos_mes)
                 })
             
             # Ordenar por cantidad de pedidos

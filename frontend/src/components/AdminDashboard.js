@@ -323,6 +323,29 @@ function AdminDashboard() {
     }
   };
 
+  const handleDeletePedido = async (pedidoId) => {
+    if (window.confirm('¿Estás seguro de que deseas eliminar este pedido?')) {
+      try {
+        const token = localStorage.getItem('token');
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+
+        await axios.delete(`http://localhost:5000/pedidos/${pedidoId}`, { headers });
+        
+        // Mostrar mensaje de éxito
+        alert('Pedido eliminado correctamente');
+        
+        // Actualizar la lista de pedidos
+        fetchData();
+      } catch (err) {
+        console.error('Error al eliminar pedido:', err);
+        setError(err.response?.data?.error || 'Error al eliminar el pedido');
+      }
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userRole');
@@ -503,6 +526,12 @@ function AdminDashboard() {
                         }}
                       >
                         Ver Detalles
+                      </button>
+                      <button
+                        className="delete-button"
+                        onClick={() => handleDeletePedido(pedido._id)}
+                      >
+                        Eliminar
                       </button>
                     </td>
                   </tr>
